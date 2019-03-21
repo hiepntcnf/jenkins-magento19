@@ -1,7 +1,7 @@
 version: "3.7"
 services:
   nginx:
-    image: canifa/nginx:latest
+    image: canifa/nginx
     ports:
       - "80:80"
       - "443:443"
@@ -11,7 +11,7 @@ services:
       - ./config/nginx/includes:/etc/nginx/includes
       - ./config/nginx/sites-enabled:/etc/nginx/conf.d
       - ./config/nginx/custom-includes:/etc/nginx/custom-includes
-      - ../:/var/www/html
+      - ./:/var/www/html
     networks:
       default:
       cnf:
@@ -21,7 +21,7 @@ services:
   php:
     image: canifa/php:7.1-fpm
     volumes:
-      - ../:/var/www/html
+      - ./:/var/www/html
     networks:
       default:
       cnf:
@@ -77,36 +77,6 @@ services:
       #haproxy:
       #image: haproxy:1.9
       #env_file: ./dev/docker/etc/.env
-  mailhog:
-    image: mailhog/mailhog
-  kibana: # logs frontend
-    image: kibana:4.5.4
-    container_name: kibana
-    ports:
-      - 6008:5601
-    labels:
-      container_group: logging
-
-  elasticsearch: # logs storage & full-text search
-    image: elasticsearch:2.3.5
-    container_name: elasticsearch
-    ports:
-      - 9200:9200
-    labels:
-      container_group: storage
-  logstash: # forwards logs through Redis from logsprout to Elasticsearch
-    image: logstash:2.3.4
-    container_name: logstash
-    command: 'logstash -f /logstash.conf -v'
-    volumes:
-      - ./config/logstash/logstash.conf:/logstash.conf
-    labels:
-      container_group: logging
-  redis_log: # dedicated for logging bridge
-    image: redis:latest
-    container_name: redis_log
-    labels:
-      container_group: storage
 networks:
   default:
     driver: bridge
