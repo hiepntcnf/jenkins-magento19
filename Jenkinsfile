@@ -16,6 +16,8 @@ node {
     try {
         stage ('Clone') {
             checkout scm
+           
+            
         }
         stage ('preparations') {
             try {
@@ -27,8 +29,13 @@ node {
             }
         }
         stage('Build') {
+            docker.build("canifa/nginx")
+        docker.build("canifa/php")
         }
-        stage ('Tests') {                
+        stage ('Tests') {
+            docker.image('canifa/php').inside {
+            sh 'php --version'
+        }
             parallel 'static': {
             },
             'unit': {
