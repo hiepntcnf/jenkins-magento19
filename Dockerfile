@@ -1,4 +1,4 @@
-FROM canifa:7.1-fpm
+FROM canifa/php:7.1-fpm
 LABEL maintainer hiepnt
 
 RUN usermod -u 1000 www-data
