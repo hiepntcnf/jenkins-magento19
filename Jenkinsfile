@@ -30,7 +30,7 @@ node {
         }
         stage('Build') {
             sh 'ls'
-            sh 'docker-compose up -d --build'
+            sh "docker-composer build"
         }
         stage ('Tests') {
             docker.image('canifa/php').inside {
