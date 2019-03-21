@@ -2,6 +2,7 @@ node {
     def PROJECT_NAME = "project_name"
 
     // Clean workspace before doing anything
+    sh 'ls'
     deleteDir()
 
     propertiesData = [disableConcurrentBuilds()]
@@ -14,7 +15,13 @@ node {
 
     try {
         stage ('Clone') {
-            checkout scm
+            //checkout scm
+            checkout([
+   $class: 'GitSCM',
+   branches: scm.branches,
+   extensions: scm.extensions + [[$class: 'WipeWorkspace']],
+   userRemoteConfigs: scm.userRemoteConfigs
+])
         }
         stage ('preparations') {
             try {
