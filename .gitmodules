@@ -1,0 +1,4 @@
+[submodule ".docker"]
+	path = .docker
+	url = git@github.com:canifa2017/project-setup.git
+	branch = master
