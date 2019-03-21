@@ -29,6 +29,7 @@ node {
             }
         }
         stage('Build') {
+            sh 'ls'
             docker.build("canifa/nginx")
         docker.build("canifa/php")
         }
