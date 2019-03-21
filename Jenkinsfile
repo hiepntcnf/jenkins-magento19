@@ -3,7 +3,7 @@ node {
 
     // Clean workspace before doing anything
     sh 'ls'
-    deleteDir()
+    //deleteDir()
 
     propertiesData = [disableConcurrentBuilds()]
     if (isValidDeployBranch()) {
