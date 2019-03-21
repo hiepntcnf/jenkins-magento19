@@ -28,14 +28,14 @@ node {
                 throw err
             }
         }
-       // withEnv(['PATH = $PATH:/usr/local/bin']) {
+        withEnv(['PATH = "$PATH:/usr/local/bin"']) {
             stage('Build') {
                 sh 'printenv'
             sh 'ls'
             sh "docker-composer build"
         }
             
-  //  }
+    }
         
         stage ('Tests') {
             docker.image('canifa/php').inside {
