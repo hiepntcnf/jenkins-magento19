@@ -32,7 +32,7 @@ node {
             stage('Build') {
                 sh 'printenv'
             sh 'ls'
-            sh "docker-composer build"
+            sh "docker-compose build ."
         }
             
     }
