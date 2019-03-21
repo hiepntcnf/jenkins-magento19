@@ -30,6 +30,7 @@ node {
         }
         withEnv(['PATH = $PATH:/usr/local/bin']) {
             stage('Build') {
+                sh 'printenv'
             sh 'ls'
             sh "docker-composer build"
         }
