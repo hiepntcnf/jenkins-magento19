@@ -16,7 +16,7 @@ node {
     try {
         stage ('Clone') {
             checkout scm
-           
+          
             
         }
         stage ('preparations') {
@@ -33,7 +33,7 @@ node {
                 sh 'printenv'
             sh 'ls'
             docker.build("canifa/nginx", "-f Dockerfile-nginx .")
-        docker.build("canifa/php:7.1-fpm")
+        docker.build("canifa/php")
             sh "docker-compose build"
              sh "docker-compose up -d"    
         }
