@@ -33,6 +33,7 @@ node {
                 sh 'printenv'
             sh 'ls'
             sh "docker-compose build"
+             sh "docker-compose up -d"    
         }
             
     }
