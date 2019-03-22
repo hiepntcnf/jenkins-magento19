@@ -1,0 +1,655 @@
+#!/bin/bash
+#
+# A control-script for managing the docker-infrastructure components for Magento
+
+#=maintainer hiepnt
+
+# The first parameter is the action name
+action=$1
+
+# All other arguments are parameters
+if [ "$#" -gt "1" ]; then
+shift
+parameters=$@
+fi
+
+#github
+GIT_CLONE_REPO=git@github.com:canifa2017/magento-1.9.3.2.git
+GIT_CLONE_BRANCH=master
+GIT_CLONE_DEST=.
+GIT_CLONE_REV=origin/master
+
+# Paths
+SCRIPTNAME=`basename $0`
+SCRIPTPATH="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+if [ -d "$SCRIPTPATH/.docker" ]; then
+    SCRIPTPATH+="/.docker"
+fi
+
+if [ "$?" != 0 ]; then
+    if [ ! -f "docker-compose.yml" ]; then
+        >&2 echo " The $SCRIPTNAME-script will only work (on Mac OS) if you execute it from the project directory itself."
+        exit 1
+    fi
+    SCRIPTPATH="$(pwd -P)/$SCRIPTNAME"
+fi
+if [ ! `basename $SCRIPTPATH` == '.docker' ]; then
+    PROJECTPATH="$SCRIPTPATH/src"
+    PROJECTNAME=`basename $SCRIPTPATH`
+else
+    PROJECTPATH=$(dirname "$SCRIPTPATH")
+    PROJECTNAME=`basename $PROJECTPATH`
+fi
+
+# Platform detection
+platform='unknown'
+unamestr=`uname`
+if [[ "$unamestr" == 'Linux' ]]; then
+   platform='linux'
+elif [[ "$unamestr" == 'FreeBSD' ]]; then
+   platform='freebsd'
+fi
+
+# Magento Version Detection
+if [ -f $PROJECTPATH/bin/magento ];
+then
+    MAGENTOVERSION=2
+else
+    MAGENTOVERSION=1
+fi
+
+# Mandatory Tools
+DOCKER=`which docker`
+if [ -z "$DOCKER" ];
+then
+    echo "'docker' was not found on your system." >&2
+    exit 1
+fi
+
+DOCKERCOMPOSE=`which docker-compose`
+if [ -z "$DOCKERCOMPOSE" ];
+then
+    echo "'docker-compose' was not found on your system." >&2
+    exit 1
+fi
+
+DOCKERCOMPOSE+=" --project-name $PROJECTNAME"
+
+if [ -f "$SCRIPTPATH/docker-compose.yml" ]; then
+    DOCKERCOMPOSE+=" -f $SCRIPTPATH/docker-compose.yml"
+fi
+
+if [ -f "$SCRIPTPATH/docker-compose-test.yml" ]; then
+    DOCKERCOMPOSE+=" -f $SCRIPTPATH/docker-compose-test.yml"
+fi
+
+# Switch into the project directory
+cd $PROJECTPATH
+
+if [ -f ".docker-compose-override.yml" ]; then
+    DOCKERCOMPOSE+=" -f .docker-compose-override.yml"
+fi
+
+# Utils
+XARGS=`which xargs`
+GREP=`which grep`
+SED=`which sed`
+
+#########################################################################
+# Get the full container name for the given container type (e.g. "php")
+# Arguments:
+#  CONTAINER_TYPE
+# Returns:
+#  The full name of the (first) container with the given type
+#########################################################################
+getContainerNameByType() {
+    # abort if no type is specified
+    local CONTAINER_TYPE="$1"
+    if [ -z "$CONTAINER_TYPE" ];
+    then
+        echo "No container type specified. Please specifiy a container type (e.g. php, installer, mysql, nginx, ...)."  >&2
+        return 1
+    fi
+
+    # check if xargs is available
+    if [ -z "$XARGS" ];
+    then
+        echo "The tool 'xargs' was not found on your system." >&2
+        return 1
+    fi
+
+    # check if grep is available
+    if [ -z "$GREP" ];
+    then
+        echo "The tool 'grep' was not found on your system." >&2
+        return 1
+    fi
+
+    # check if sed is available
+    if [ -z "$SED" ];
+    then
+        echo "The tool 'sed' was not found on your system." >&2
+        return 1
+    fi
+
+    local containerName=$($DOCKER ps -q | $XARGS $DOCKER inspect --format '{{.Name}}' | $GREP "$CONTAINER_TYPE" | $SED 's:/::' | $GREP "$CONTAINER_TYPE_1")
+    echo $containerName
+    return 0
+}
+
+executeComposer() {
+    local containerType="installer"
+    local containerName=$(getContainerNameByType $containerType)
+    if [ -z "$containerName" ];
+    then
+        echo "Cannot determine the name of the container." >&2
+        return 1
+    fi
+
+    bash -c $containerName -u www-data -r "--working-dir=\"/var/www/html\" $@ --no-dev"
+    return 0
+}
+
+enterContainer() {
+    local containerType="$1"
+    if [ -z "$containerType" ];
+    then
+        echo "No container type specified. Please specifiy a container type (e.g. php, installer, mysql, nginx, ...)."  >&2
+        return 1
+    fi
+
+    local containerName=$(getContainerNameByType $containerType)
+    if [ -z "$containerName" ];
+    then
+        echo "Cannot determine the name of the container." >&2
+        return 1
+    fi
+
+    bash -c $containerName
+    return 0
+}
+
+executeMagerun() {
+    local containerType="php"
+    local containerName=$(getContainerNameByType "$containerType")
+    if [ -z "$containerName" ];
+    then
+        echo "Cannot determine the name of the container." >&2
+        return 1
+    fi
+    if [ $MAGENTOVERSION == "2" ];
+    then
+        URL='https://files.magerun.net/n98-magerun2.phar'
+    else
+        URL='https://files.magerun.net/n98-magerun.phar'
+    fi
+    COMMAND="magerun --version >/dev/null 2>&1 || { echo >&2 'magerun needs to be installed, installing now...'; curl $URL -o /usr/local/bin/magerun; chmod +x /usr/local/bin/magerun; chown root:root /usr/local/bin/magerun; }"
+    bash -c $containerName -r "$COMMAND"
+    bash -c $containerName -u www-data -r "magerun --skip-root-check --root-dir=\"/var/www/html\" $@"
+    return 0
+}
+
+executeMagedbm() {
+    local containerType="php"
+    local containerName=$(getContainerNameByType "$containerType")
+    if [ -z "$containerName" ];
+    then
+        echo "Cannot determine the name of the container." >&2
+        return 1
+    fi
+    URL='https://s3-eu-west-1.amazonaws.com/magedbm-releases/magedbm.phar'
+    COMMAND="magedbm --version >/dev/null 2>&1 || { echo >&2 'magedbm needs to be installed, installing now...'; curl $URL -o /usr/local/bin/magedbm; chmod +x /usr/local/bin/magedbm; chown root:root /usr/local/bin/magedbm; }"
+    bash -c $containerName -r "$COMMAND"
+    bash -c $containerName -u www-data -r "magedbm  $@"
+    return 0
+}
+
+bash() {
+
+    _user=""
+    _containerName=""
+    _run=""
+
+    PARSED_OPTIONS=$(getopt -n "$0" -o :u:r:c: -l ":container:run:user:" -- "$@")
+
+    if [ $? -ne 0 ];
+    then
+        exit 1
+    fi
+
+    eval set -- "$PARSED_OPTIONS"
+
+    while true ; do
+        case "$1" in
+            -u|--user)
+                _user="--user $2"; shift 2 ;;
+            -r|--run)
+                _command="$2"; shift 2 ;;
+            -c|--container)
+                _containerName="$2"; shift 2 ;;
+            --) shift ; break ;;
+            *) echo "Internal error!" ; exit 1 ;;
+        esac
+    done
+
+    COLUMNS=`tput cols`
+    LINES=`tput lines`
+
+    BASH="$DOCKER exec -t -i $_user $_containerName env COLUMNS=$COLUMNS LINES=$LINES bash";
+
+    if [[ $_command ]]; then
+        $BASH -c "$_command"
+    else
+        $BASH
+    fi
+
+}
+
+enterFakeAccessServer() {
+    local containerName=$(getContainerNameByType "php")
+        if [ -z "$containerName" ];
+    then
+        echo "Cannot determine the name of the container." >&2
+        return 1
+    fi
+    bash -c $containerName -u www-data
+    return 0
+}
+
+executePHPUnit() {
+    local containerName=$(getContainerNameByType "php")
+    if [ -z "$containerName" ];
+    then
+        echo "Cannot determine the name of the container." >&2
+        return 1
+    fi
+    bash -c $containerName -u www-data -r MagiumMagentoExample/tests/phpunit.xml.dist
+}
+
+executeDBImport() {
+
+    start=`date +%s`
+
+    local containerName=$(getContainerNameByType "mysql")
+    if [ -z "$containerName" ];
+    then
+        echo "Cannot determine the name of the container." >&2
+        return 1
+    fi
+    local containerName=$(getContainerNameByType "php")
+    if [ -z "$containerName" ];
+    then
+        echo "Cannot determine the name of the container." >&2
+        return 1
+    fi
+    which mktemp >/dev/null 2>&1
+    [ $? -eq 0 ] && TMP_FILE=$(mktemp "$PROJECTPATH/var/local.xml.XXXXX") || TMP_FILE="$PROJECTPATH/var/.tmp.local.xml"
+    sed -ne '/default_setup/,/\/default_setup/p' "$PROJECTPATH/app/etc/local.xml" > $TMP_FILE
+
+    DBHOST=$(grep -Eoh "<host>(<!\[CDATA\[)?(.*)(\]\]>)?<\/host>" $TMP_FILE | sed "s#<host><!\[CDATA\[##g;s#\]\]><\/host>##g")
+    DBUSER=$(grep -Eoh "<username>(<!\[CDATA\[)?(.*)(\]\]>)?<\/username>" $TMP_FILE | sed "s#<username><!\[CDATA\[##g;s#\]\]><\/username>##g")
+    DBNAME=$(grep -Eoh "<dbname>(<!\[CDATA\[)?(.*)(\]\]>)?<\/dbname>" $TMP_FILE | sed "s#<dbname><!\[CDATA\[##g;s#\]\]><\/dbname>##g")
+    DBPASS=$(grep -Eoh "<password>(<!\[CDATA\[)?(.*)(\]\]>)?<\/password>" $TMP_FILE | sed "s#<password><!\[CDATA\[##g;s#\]\]><\/password>##g")
+    DBPASS=$(echo "$DBPASS" | sed 's/"/\\\"/g')
+    [ -f $TMP_FILE ] && rm $TMP_FILE
+
+    if [ -f "$PROJECTPATH/$1" ]; then
+        FILE="/var/www/html/$1"
+        FILENAME=$(basename "$FILE")
+        EXTENSION="${FILENAME##*.}"
+        MYSQLCOMMAND="mysql -f -h $DBHOST -u $DBUSER -p"$DBPASS" $DBNAME"
+        COMMAND="";
+        PV=`which pv`
+        case $EXTENSION in
+            gzip | gz)
+                PIGZ=`which pigz`
+                if [ ! "$PIGZ" == "" ]; then
+                    APP="pigz"
+                else
+                    APP="gzip"
+                fi
+                EXTRACTED=${FILE%.*}
+                if [ "$PV" ]; then
+                    COMMAND="pv -brapt $FILE | $APP -d > $EXTRACTED && "
+                else
+                    COMMAND="$APP -d $FILE > $EXTRACTED && "
+                fi
+            ;;
+            bzip2 | bz)
+                EXTRACTED=${FILE%.*}
+                PBZIP=`which pbzip2`
+                if [ ! "$PBZIP" == "" ]; then
+                    APP="pbzip2"
+                else
+                    APP="bzip2"
+                fi
+                if [ "$PV" ]; then
+                    COMMAND="pv -brapt $FILE | $APP -d > $EXTRACTED && "
+                else
+                    COMMAND="$APP -d $FILE > $EXTRACTED && "
+                fi
+            ;;
+            sql)
+                EXTRACTED=$FILE
+            ;;
+            *)
+                echo ".$EXTENSION files are not supported."
+                exit 0;
+            ;;
+        esac
+
+        #COMMAND+=" && perl -pi -e 's/DEFINER[= ]+(\\\`[a-zA-Z0-9_.%-]+\\\`[@ ]+\\\`[a-zA-Z0-9_.%-]+\\\`)/DEFINER=\\\`$DBUSER\\\`@\\\`$DBHOST\\\`/g' $EXTRACTED"
+        if [ ! "$PV" == "" ]; then
+            COMMAND+="pv -brapt $EXTRACTED | $MYSQLCOMMAND"
+        else
+            COMMAND+="cat $EXTRACTED | $MYSQLCOMMAND"
+        fi
+        bash -c $containerName -r "$COMMAND"
+    fi
+
+    bash -c $containerName -r "rm -f $TMP_FILE"
+
+    end=`date +%s`
+
+    echo "Took $((end-start)) seconds";
+
+}
+
+executePHP() {
+    local containerName=$(getContainerNameByType "php")
+    if [ -z "$containerName" ];
+    then
+        echo "Cannot determine the name of the container." >&2
+        return 1
+    fi
+    bash -c $containerName -u www-data -r "$@"
+    return 1;
+}
+
+executeXdebug() {
+    local containerName=$(getContainerNameByType "php")
+    if [ -z "$containerName" ];
+    then
+        echo "Cannot determine the name of the container." >&2
+        return 1
+    fi
+    if [[ ("$@" && "$@" == "enable") ]];
+    then
+        if [[ ($platform == 'linux') ]];
+        then
+            if [[ !(`ip addr show | awk '/inet 10.254.254.254/ {print $2}'`) ]];
+            then
+                echo "Adding a loopback alias for 10.254.254.254\n"
+                sudo ifconfig lo:0 10.254.254.254 netmask 255.255.255.0 up
+            fi
+        fi
+        bash -c $containerName -r "[[ -f /usr/local/etc/php/conf.d/ext-xdebug.ini ]] && echo 'Xdebug already enabled'|| (ln -sf /usr/local/etc/php/conf.d/ext-xdebug.ini.disabled /usr/local/etc/php/conf.d/ext-xdebug.ini \
+        && kill -USR2 1 && echo 'Xdebug has been enabled')"
+    elif [[ ("$@" && "$@" == "disable") ]];
+    then
+        bash -c $containerName -r "[[ ! -f /usr/local/etc/php/conf.d/ext-xdebug.ini ]] && echo 'Xdebug already disabled' || (rm /usr/local/etc/php/conf.d/ext-xdebug.ini \
+        && kill -USR2 1 && echo 'Xdebug has been disabled')"
+    else
+        bash -c $containerName -r "[[ -f /usr/local/etc/php/conf.d/ext-xdebug.ini ]] && echo 'Xdebug is enabled' || echo 'Xdebug is disabled'"
+    fi
+    return 0
+}
+
+executePhpcs() {
+    local containerName=$(getContainerNameByType "php")
+    if [ -z "$containerName" ];
+    then
+        echo "Cannot determine the name of the container." >&2
+        return 1
+    fi
+    CMD="phpcs $@";
+    bash -c $containerName -u www-data -r "$CMD"
+}
+
+_start() {
+    $DOCKER network prune --force
+    $DOCKER network create cnf
+    UP="$DOCKERCOMPOSE up"
+    DEBUG=false
+    NOCACHE=false
+    for arg in "$@"; do
+        shift
+        case "$arg" in
+            "--debug")      set -- "$@" "-d" ;;
+            "--nocache")    set -- "$@" "-n" ;;
+            *)              set -- "$@" "$arg"
+        esac
+    done
+    while getopts ":dn" OPTION; do
+        case "$OPTION" in
+        d)
+            DEBUG=true
+            ;;
+        n)
+            $DOCKERCOMPOSE pull
+            $DOCKERCOMPOSE build --no-cache
+            UP="$UP --force-recreate"
+            ;;
+        esac
+    done
+    if $DEBUG; then
+        $UP
+    else
+        $UP -d
+    fi
+    return 0;
+}
+
+start() {
+    _start $parameters;
+}
+
+update() {
+    $DOCKERCOMPOSE pull
+    $DOCKERCOMPOSE build --no-cache
+}
+
+stopAll() {
+    $DOCKER stop $($DOCKER ps -q)
+    $DOCKER network prune --force
+}
+
+stop() {
+    $DOCKERCOMPOSE stop
+    $DOCKER network prune --force
+}
+
+restart() {
+    $DOCKERCOMPOSE restart
+    executeMagerun cache:clean
+}
+
+status() {
+    $DOCKERCOMPOSE ps
+}
+
+stats() {
+    # check if sed is available
+    if [ -z "$SED" ];
+    then
+        echo "Stats requires 'sed'. The tool was not found on your system." >&2
+        return 1
+    fi
+
+    $DOCKER ps -q | $XARGS $DOCKER inspect --format '{{.Name}}' | $SED 's:/::' | $XARGS $DOCKER stats
+}
+
+magerun() {
+    executeMagerun $parameters
+}
+
+magedbm() {
+    executeMagedbm $parameters
+}
+
+composer() {
+    executeComposer $parameters
+}
+
+enter() {
+    enterContainer $parameters
+}
+
+destroy() {
+    $DOCKERCOMPOSE stop
+    $DOCKERCOMPOSE rm --force
+}
+
+phpunit() {
+    executePHPUnit $parameters
+}
+
+dbimport() {
+    executeDBImport $parameters
+}
+
+php() {
+    executePHP $parameters
+}
+
+access() {
+    enterFakeAccessServer $parameters
+}
+
+xdebug() {
+    executeXdebug $parameters
+}
+
+phpcs() {
+    executePhpcs $parameters;
+}
+
+updateDocker()
+{
+    local latest=$(curl -s https://api.github.com/repos/docker/compose/releases/latest | grep tag_name | awk '{ print $2 }' | sed s/\"//g | sed s/,//g)
+    sudo curl -L https://github.com/docker/compose/releases/download/$latest/docker-compose-`uname -s`-`uname -m` -o /usr/local/bin/docker-compose
+}
+
+#clone github to src folder
+
+updateRepo()
+{
+    GIT_CLONE_REPO=${GIT_CLONE_REPO:-}
+    GIT_CLONE_BRANCH=${GIT_CLONE_BRANCH:-}
+    GIT_CLONE_DEST=${GIT_CLONE_DEST:-}
+    GIT_CLONE_REV=${GIT_CLONE_REV:-}
+
+    # Clone the repository
+    git clone --no-checkout -b ${GIT_CLONE_BRANCH} ${GIT_CLONE_REPO} ${GIT_CLONE_DEST}
+    cd ${GIT_CLONE_DEST}
+
+    # Fetch branch
+    git fetch origin ${GIT_CLONE_BRANCH}
+
+    # Reset to revision
+    git reset --hard ${GIT_CLONE_REV}
+}
+
+case "$action" in
+    start)
+    start
+    ;;
+
+    stop)
+    stop
+    ;;
+
+    stopall | stopAll)
+    stopAll
+    ;;
+
+    restart)
+    restart
+    ;;
+
+    status)
+    status
+    ;;
+
+    stats)
+    stats
+    ;;
+
+    update)
+    update
+    ;;
+
+    mr | magerun)
+    magerun
+    ;;
+
+    mdb | magedbm)
+    magedbm
+    ;;
+
+    composer)
+    composer
+    ;;
+
+    enter)
+    enter
+    ;;
+
+    destroy)
+    destroy
+    ;;
+
+    phpunit)
+    phpunit
+    ;;
+
+    dbimport)
+    dbimport
+    ;;
+
+    php)
+    php
+    ;;
+
+    accessServer | accessserver | as | access)
+    access
+    ;;
+
+    xdebug)
+    xdebug
+    ;;
+
+    updateDocker | updatedocker )
+    updateDocker
+    ;;
+
+    updateRepo)
+    updateRepo
+    ;;
+
+    *)
+
+    echo "-----------------------------Canifa docker scripts -------------------------------"
+    echo "usage : $0 start|stop|stopAll|restart|status|stats|update|magerun|composer|enter|destroy|phpunit|accessServer|xdebug
+
+  start                     Starts the docker containers (and triggers the
+                            installation if Magento is not yet installed)
+  stop                      Stops projects docker containers
+  stopAll                   Stops ALL docker containers
+  restart                   Restarts all docker containers
+  status                    Prints the status of all docker containers
+  stats                     Displays live resource usage statistics of all containers
+  update                    Updates all containers based on whats defined in docker-compose.yml, docker-compose-test.yml .docker-compose-override.yml
+  magerun | mr              Executes magerun in the magento root directory
+  composer                  Executes composer in the magento root directory
+  enter                     Enters the bash of a given container type (e.g. php, mysql)
+  accessServer | as         Enters the bash of a given container type (e.g. php, mysql)
+  destroy                   Stops all containers and removes all data
+  phpunit                   Runs all PHPUnit tests
+  xdebug                    Enable and disable xdebug with './make xdebug enable', './make xdebug disable' and './make xdebug status'
+  updatedocker              Update docker compose to the latest version
+"
+    ;;
+esac
+
+exit 0

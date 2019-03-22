@@ -16,9 +16,8 @@ node {
     try {
         stage ('Clone') {
             checkout scm
-          
-            
         }
+
         stage ('preparations') {
             try {
                 deploySettings = getDeploySettings()
@@ -28,28 +27,25 @@ node {
                 throw err
             }
         }
+
         withEnv(['PATH = "$PATH:/usr/local/bin"']) {
             stage('Build') {
-               // sh 'printenv'
-           // sh 'ls'
-            //docker.build("canifa/nginx", "-f Dockerfile-nginx .")
-        //docker.build("canifa/php")
-              sh "docker-compose down"  
-            sh "docker-compose build"
-             sh "docker-compose up -d"    
+                sh "cd docker"
+                sh "docker-compose down"
+                sh "docker-compose build"
+                sh "docker-compose up -d"
+            }
         }
-            
-    }
-        
+
         stage ('Tests') {
-            docker.image('canifa/php').inside {
-            sh 'php --version'
-        }
             parallel 'static': {
+
             },
             'unit': {
+
             },
             'integration': {
+
             }
         }
         if (deploySettings) {
@@ -90,7 +86,7 @@ def getBranchDetails() {
 
 def getDeploySettings() {
     def deploySettings = [:]
-    if (BRANCH_NAME == 'develop') { 
+    if (BRANCH_NAME == 'develop') {
         deploySettings['ssh'] = "user@domain-igr.com"
     } else if (params.deployServer && params.deployServer != 'none') {
         branchDetails = getBranchDetails()

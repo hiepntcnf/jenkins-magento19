@@ -1,0 +1,63 @@
+#
+# The Percona Server 5.7 configuration file.
+#
+# One can use all long options that the program supports.
+# Run program with --help to get a list of available options and with
+# --print-defaults to see which it would actually understand and use.
+#
+# For explanations see
+# http://dev.mysql.com/doc/mysql/en/server-system-variables.html
+
+[mysqld]
+skip-host-cache
+skip-name-resolve
+user                            = mysql
+pid-file                        = /var/run/mysqld/mysqld.pid
+socket                          = /var/run/mysqld/mysqld.sock
+port                            = 3306
+basedir                         = /usr
+datadir                         = /var/lib/mysql
+tmpdir                          = /tmp
+lc-messages-dir                 = /usr/share/mysql
+
+#explicit_defaults_for_timestamp
+
+# Recommended in standard MySQL setup
+sql_mode                        = NO_ENGINE_SUBSTITUTION,STRICT_ALL_TABLES
+
+# Disabling symbolic-links is recommended to prevent assorted security risks
+symbolic-links                  = 0
+
+default-storage-engine          = InnoDB
+
+# MyISAM #
+key-buffer-size                 = 64M
+
+# SAFETY #
+max-allowed-packet              = 128M
+max-connect-errors              = 1000000
+
+# CACHES AND LIMITS #
+tmp-table-size                  = 64M
+max-heap-table-size             = 64M
+query-cache-type                = 0
+query-cache-size                = 0
+max-connections                 = 1000
+thread-cache-size               = 100
+open-files-limit                = 65535
+table-definition-cache          = 4096
+table-open-cache                = 4096
+
+# INNODB #
+innodb-flush-method             = O_DIRECT
+innodb-log-files-in-group       = 2
+innodb-log-file-size            = 32M
+innodb-flush-log-at-trx-commit  = 2
+innodb-file-per-table           = 1
+innodb-buffer-pool-size         = 8G
+
+# LOGGING #
+log-error                       = /var/lib/mysql/mysql-error.log
+log-queries-not-using-indexes   = 1
+slow-query-log                  = 1
+slow-query-log-file             = /var/lib/mysql/mysql-slow.log

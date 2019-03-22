@@ -1,0 +1,17 @@
+version: "3.7"
+services:
+  nginx:
+    volumes:
+      - ./:/var/www/html
+    networks:
+      cnf:
+  php:
+    networks:
+      cnf:
+  mysql:
+    networks:
+      cnf:
+    volumes:
+      - db-data-stage:/var/lib/mysql
+volumes:
+  db-data-stage:

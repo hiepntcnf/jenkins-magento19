@@ -1,0 +1,112 @@
+version: "3.7"
+services:
+  nginx:
+    image: canifa/nginx:latest
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./logs/nginx:/var/log/nginx
+      - ./config/nginx/ssl:/etc/nginx/ssl
+      - ./config/nginx/includes:/etc/nginx/includes
+      - ./config/nginx/sites-enabled:/etc/nginx/conf.d
+      - ./config/nginx/custom-includes:/etc/nginx/custom-includes
+      - ../:/var/www/html
+    networks:
+      default:
+      cnf:
+        aliases: ["cnf-mage-nginx"]
+    depends_on:
+      - php
+  php:
+    image: canifa/php:7.1-fpm
+    volumes:
+      - ../:/var/www/html
+    networks:
+      default:
+      cnf:
+        aliases: ["cnf-mage-php"]
+    depends_on:
+      - mysql
+      - cache
+      - fullpagecache
+      - sessions
+  mysql:
+    image: percona:5.7.22
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: magento
+      MYSQL_DATABASE: magento
+      MYSQL_USER: magento
+      MYSQL_PASSWORD: magento
+    volumes:
+      - ./data/mysql:/var/lib/mysql
+      - ./config/mysql/percona-server.conf.d:/etc/mysql/percona-server.conf.d
+    networks:
+      default:
+      cnf:
+        aliases: ["cnf-mage-mysql"]
+  cache:
+    image: redis:latest
+    networks:
+      default:
+      cnf:
+        aliases: ["cnf-mage-cache"]
+  fullpagecache:
+    image: redis:latest
+    networks:
+      default:
+      cnf:
+        aliases: ["cnf-mage-fpc"]
+  sessions:
+    image: redis:latest
+    networks:
+      default:
+      cnf:
+        aliases: ["cnf-mage-sess"]
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    ports:
+      - "8088:80"
+    links:
+      - "mysql:mysql"
+    environment:
+      PMA_HOST: "mysql"
+      PMA_PORT: 3306
+  mailhog:
+    image: mailhog/mailhog
+#  kibana: # logs frontend
+#    image: kibana:4.5.4
+#    container_name: kibana
+#    ports:
+#      - 6008:5601
+#    labels:
+#      container_group: logging
+
+#  elasticsearch: # logs storage & full-text search
+#    image: elasticsearch:2.3.5
+#    container_name: elasticsearch
+#    ports:
+#      - 9200:9200
+#    labels:
+#      container_group: storage
+#  logstash: # forwards logs through Redis from logsprout to Elasticsearch
+#    image: logstash:2.3.4
+#    container_name: logstash
+#    command: 'logstash -f /logstash.conf -v'
+#    volumes:
+#      - ./config/logstash/logstash.conf:/logstash.conf
+#    labels:
+#      container_group: logging
+#  redis_log: # dedicated for logging bridge
+#    image: redis:latest
+#    container_name: redis_log
+#    labels:
+#      container_group: storage
+networks:
+  default:
+    driver: bridge
+  cnf:
+    external:
+      name: cnf

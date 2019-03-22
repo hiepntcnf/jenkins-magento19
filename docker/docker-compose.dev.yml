@@ -1,0 +1,22 @@
+version: "3.7"
+services:
+  nginx:
+    container_name: dev-nginx
+    networks:
+      dev:
+  php:
+    container_name: dev-php
+    networks:
+      dev:
+  mysql:
+    container_name: dev-mysql
+    networks:
+      dev:
+    volumes:
+      - db-data-dev:/var/lib/mysql
+volumes:
+  db-data-dev:
+networks:
+  dev:
+    external:
+      name: dev
