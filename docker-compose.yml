@@ -2,6 +2,7 @@ version: "3.7"
 services:
   nginx:
     image: canifa/nginx:latest
+    dockerfile: Dockerfile-nginx
     ports:
       - "80:80"
       - "443:443"
@@ -15,6 +16,7 @@ services:
       - php
   php:
     image: canifa/php
+    dockerfile: Dockerfile
     volumes:
       - ./:/var/www/html
     networks:
@@ -36,8 +38,7 @@ services:
       MYSQL_USER: magento
       MYSQL_PASSWORD: magento
     volumes:
-      - ./data/mysql:/var/lib/mysql
-      - ./config/mysql/percona-server.conf.d:/etc/mysql/percona-server.conf.d
+      - db-data:/var/lib/mysql
     networks:
       default:
       cnf:
@@ -78,3 +79,5 @@ networks:
   cnf:
     external:
       name: cnf
+volumes:
+  db-data:
