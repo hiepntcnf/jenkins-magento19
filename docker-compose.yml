@@ -1,9 +1,7 @@
 version: "3.7"
 services:
   nginx:
-    #image: canifa/nginx:latest
-    build:
-      dockerfile: Dockerfile-nginx
+    image: canifa/nginx:latest
     ports:
       - "80:80"
       - "443:443"
@@ -16,9 +14,7 @@ services:
     depends_on:
       - php
   php:
-    #image: canifa/php
-    build:
-      dockerfile: Dockerfile
+    image: canifa/php:7.1-fpm
     volumes:
       - ./:/var/www/html
     networks:
@@ -72,9 +68,6 @@ services:
     environment:
       PMA_HOST: "mysql"
       PMA_PORT: 3306
-      #haproxy:
-      #image: haproxy:1.9
-      #env_file: ./dev/docker/etc/.env
 networks:
   default:
     driver: bridge
