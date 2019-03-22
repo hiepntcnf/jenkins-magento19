@@ -30,10 +30,11 @@ node {
         }
         withEnv(['PATH = "$PATH:/usr/local/bin"']) {
             stage('Build') {
-                sh 'printenv'
-            sh 'ls'
-            docker.build("canifa/nginx", "-f Dockerfile-nginx .")
-        docker.build("canifa/php")
+               // sh 'printenv'
+           // sh 'ls'
+            //docker.build("canifa/nginx", "-f Dockerfile-nginx .")
+        //docker.build("canifa/php")
+              sh "docker-compose down"  
             sh "docker-compose build"
              sh "docker-compose up -d"    
         }
