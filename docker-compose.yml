@@ -6,6 +6,8 @@ services:
       - "80:80"
       - "443:443"
     volumes:
+      - ./config/nginx/includes:/etc/nginx/includes
+      - ./config/nginx/sites-enabled:/etc/nginx/conf.d
       - ./:/var/www/html
     networks:
       default:
