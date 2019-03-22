@@ -1,0 +1,152 @@
+map $http_x_forwarded_proto $fe_https {
+
+    default off;
+    https on;
+
+}
+
+map $http_x_forwarded_proto $fe_https_port {
+
+    default 80;
+    https 443;
+
+}
+
+# http server
+server {
+
+    listen 127.0.0.1:8080;
+    server_name default;
+
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+
+    set_real_ip_from 127.0.0.1;
+    set_real_ip_from 172.25.0.0/20;
+    real_ip_header X-Real-IP;
+    real_ip_recursive on;
+
+    # proxy requests to the pool
+    # ensure ips are passed correctly
+    location / {
+        proxy_pass http://127.0.0.1:8888;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        port_in_redirect off;
+    }
+
+}
+
+# https server
+server {
+
+    listen 443 ssl http2;
+    server_name default;
+
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+
+    include /etc/nginx/includes/ssl;
+
+    set_real_ip_from 127.0.0.1;
+    set_real_ip_from 172.25.0.0/20;
+    real_ip_header X-Real-IP;
+    real_ip_recursive on;
+
+    # proxy requests to the pool
+    # ensure ips are passed correctly
+    location / {
+        proxy_pass http://172.25.0.20:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-HTTPS on;
+        proxy_set_header X-Forwarded-Port 443;
+        port_in_redirect off;
+    }
+
+    location /admin {
+        proxy_pass http://127.0.0.1:8888;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-HTTPS on;
+        proxy_set_header X-Forwarded-Port 443;
+        port_in_redirect off;
+    }
+}
+
+server {
+    listen                      8888 default_server;
+    server_name                 default;
+
+    include                     /etc/nginx/includes/ssl;
+
+    client_max_body_size        10M;
+
+    root                        /var/www/html;
+    index                       index.php;
+
+    # add nosniff header (https://www.owasp.org/index.php/List_of_useful_HTTP_headers)
+    add_header X-Content-Type-Options nosniff;
+
+    # Serve images directly
+    location ~* ^.+\.(jpg|jpeg|gif|png|ico|css|zip|tgz|gz|rar|bz2|pdf|txt|tar|wav|bmp|rtf|js|flv|swf)$ {
+        root /var/www/html;
+    }
+
+    location / {
+        index index.html index.php;
+        try_files $uri $uri/ @handler;
+        expires 30d;
+    }
+
+    location ^~ /app/                       { deny all; }
+    location ^~ /includes/                  { deny all; }
+    location ^~ /lib/                       { deny all; }
+    location ^~ /media/downloadable/        { deny all; }
+    location ^~ /pkginfo/                   { deny all; }
+    location ^~ /report/config.xml          { deny all; }
+    location ^~ /var/                       { deny all; }
+    location ^~ /downloader/                { deny all; }
+    location /var/export/                   { deny all; }
+
+    include                     /etc/nginx/custom-locations/*.location;
+    include                     /etc/nginx/includes/api;
+
+    location ~ ^/cron\.(sh|php) {
+        return 404;
+    }
+
+    location  /. {
+        return 404;
+    }
+
+    location @handler {
+        rewrite / /index.php;
+    }
+
+    location ~ \.php/ {
+        rewrite ^(.*\.php)/ $1 last;
+    }
+
+    location ~ \.php$ {
+
+        ## Catch 404s that try_files miss
+        if (!-e $request_filename) {
+            rewrite / /index.php last;
+        }
+
+        include                 /etc/nginx/includes/fastcgi;
+        fastcgi_param           HTTPS $fe_https;
+        fastcgi_param           REMOTE_ADDR $http_x_forwarded_for;
+        fastcgi_param           SERVER_PORT $fe_https_port;
+
+    }
+
+    include                     /etc/nginx/includes/minify;
+    include                     /etc/nginx/includes/gzip;
+}

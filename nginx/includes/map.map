@@ -1,0 +1,10 @@
+## Multi shop code configuration
+map $http_host $mage_code {
+hostnames;
+    default "";
+}
+
+map $http_host $mage_type {
+hostnames;
+    default "";
+}
