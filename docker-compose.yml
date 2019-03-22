@@ -8,6 +8,7 @@ services:
     volumes:
       - ./nginx/includes:/etc/nginx/includes
       - ./nginx/sites-enabled:/etc/nginx/conf.d
+      - ./nginx/ssl:/etc/nginx/ssl
       - ./:/var/www/html
     networks:
       default:
