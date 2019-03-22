@@ -4,9 +4,3 @@ RUN usermod -u 1000 www-data
 RUN groupmod -g 1000 www-data
 
 COPY . /var/www/html
-
-WORKDIR /etc/nginx
-
-EXPOSE 80 443
-
-CMD ["nginx"]
